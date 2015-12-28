@@ -114,3 +114,14 @@ tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
 
 rpm: tar
 	rpmbuild -ta $(TARFILE).gz
+
+kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
+	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
+	@mkdir mhvtl-$(FULL_VERSION)
+	@cp mhvtl-kmod.spec mhvtl-$(FULL_VERSION)
+	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-kmod.spec
+	@$(RM) -r mhvtl-$(FULL_VERSION)
+	gzip -f -9 $(TARFILE)
+
+kmod-rpm: kmod-tar
+	rpmbuild -ta $(TARFILE).gz
