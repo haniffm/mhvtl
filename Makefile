@@ -112,6 +112,9 @@ tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
 	@$(RM) -r mhvtl-$(FULL_VERSION)
 	gzip -f -9 $(TARFILE)
 
+srpm: tar
+	rpmbuild -ts $(TARFILE).gz
+
 rpm: tar
 	rpmbuild -ta $(TARFILE).gz
 
@@ -122,6 +125,9 @@ kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-kmod.spec
 	@$(RM) -r mhvtl-$(FULL_VERSION)
 	gzip -f -9 $(TARFILE)
+
+kmod-srpm: kmod-tar
+	rpmbuild -ts $(TARFILE).gz
 
 kmod-rpm: kmod-tar
 	rpmbuild -ta $(TARFILE).gz
