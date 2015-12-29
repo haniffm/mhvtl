@@ -10,13 +10,14 @@
 # 	kernel	to build kernel module
 #
 
-VER = $(shell awk '/Version/ {print $$2}'  mhvtl-utils.spec)
-REL = $(shell awk '/Release/ {print $$2}'  mhvtl-utils.spec | sed s/%{?dist}//g)
+VER = $(shell awk '/Version/ {print $$2}'  mhvtl-utils.spec.in)
+REL = $(shell awk '/Release/ {print $$2}'  mhvtl-utils.spec.in | sed s/%{?dist}//g)
 
 VERSION ?= $(VER).$(REL)
-EXTRAVERSION =  $(if $(shell git show-ref 2>/dev/null),-git-$(shell git branch |awk '/\*/ {print $$2}'))
+EXTRAVERSION = $(if $(shell git show-ref 2>/dev/null),-git-$(shell git rev-parse --short HEAD))
+# immediate eval, for consistent across multiple rule invocation
+FULL_VERSION := $(VERSION)$(EXTRAVERSION)-$(shell echo `date "+%Y%m%d.%M%S"`)
 
-PARENTDIR = mhvtl-$(VER)
 PREFIX ?= /usr
 USR ?= vtl
 SUSER ?=root
@@ -26,6 +27,7 @@ MHVTL_CONFIG_PATH ?= /etc/mhvtl
 LIBDIR ?= /usr/lib
 CHECK_CC = cgcc
 CHECK_CC_FLAGS = '$(CHECK_CC) -Wbitwise -Wno-return-void -no-compile $(ARCH)'
+RPM_DIR = $(HOME)/rpmbuild
 
 export PREFIX DESTDIR
 
@@ -46,7 +48,7 @@ usr:	patch
 kernel: patch
 	$(MAKE) -C kernel
 
-.PHONY:check
+.PHONY: check
 check:	ARCH=$(shell sh scripts/checkarch.sh)
 check:
 	CC=$(CHECK_CC_FLAGS) $(MAKE) all
@@ -69,6 +71,7 @@ distclean:
 	$(MAKE) -C scripts distclean
 	$(MAKE) -C kernel distclean
 	$(MAKE) -C man clean
+	test -f mhvtl-utils.spec && rm mhvtl-utils.spec || true
 
 install:
 	$(MAKE) usr
@@ -81,19 +84,50 @@ install:
 	$(MAKE) -C man install $(PREFIX) $(DESTDIR) USR=$(USR)
 	test -d $(DESTDIR)/opt/mhvtl || mkdir -p $(DESTDIR)/opt/mhvtl
 
-tar:
-	$(MAKE) distclean
-	test -d ../$(PARENTDIR) || ln -s mhvtl ../$(PARENTDIR)
-	(cd ..;  tar cvfz /home/markh/mhvtl-`date +%F`-$(VERSION)$(EXTRAVERSION).tgz  --exclude=.git \
-		 $(PARENTDIR)/man \
-		 $(PARENTDIR)/doc \
-		 $(PARENTDIR)/kernel \
-		 $(PARENTDIR)/usr \
-		 $(PARENTDIR)/etc/ \
-		 $(PARENTDIR)/scripts/ \
-		 $(PARENTDIR)/include \
-		 $(PARENTDIR)/Makefile \
-		 $(PARENTDIR)/README \
-		 $(PARENTDIR)/INSTALL \
-		 $(PARENTDIR)/mhvtl-utils.spec)
+$(RPM_DIR):
+	mkdir -p $(RPM_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
+# setup depends rules to force creation of targets
+.PHONY: .FORCE
+
+.FORCE:
+
+#
+# rpm build process to be mroe flexible from git
+# lifted from https://github.com/git/git/blob/master/Makefile
+#
+%.spec: %.spec.in .FORCE
+	sed -e 's/@@VERSION@@/$(FULL_VERSION)/g' < $< > $@+
+	mv $@+ $@
+
+TAR = tar
+RM = rm -f
+TARFILE = $(RPM_DIR)/SOURCES/mhvtl-$(FULL_VERSION).tar
+
+tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
+	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
+	@mkdir mhvtl-$(FULL_VERSION)
+	@cp mhvtl-utils.spec mhvtl-$(FULL_VERSION)
+	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-utils.spec
+	@$(RM) -r mhvtl-$(FULL_VERSION)
+	gzip -f -9 $(TARFILE)
+
+srpm: tar
+	rpmbuild -ts $(TARFILE).gz
+
+rpm: tar
+	rpmbuild -ta $(TARFILE).gz
+
+kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
+	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
+	@mkdir mhvtl-$(FULL_VERSION)
+	@cp mhvtl-kmod.spec mhvtl-$(FULL_VERSION)
+	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-kmod.spec
+	@$(RM) -r mhvtl-$(FULL_VERSION)
+	gzip -f -9 $(TARFILE)
+
+kmod-srpm: kmod-tar
+	rpmbuild -ts $(TARFILE).gz
+
+kmod-rpm: kmod-tar
+	rpmbuild -ta $(TARFILE).gz
