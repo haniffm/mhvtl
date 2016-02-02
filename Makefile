@@ -27,7 +27,9 @@ MHVTL_CONFIG_PATH ?= /etc/mhvtl
 LIBDIR ?= /usr/lib
 CHECK_CC = cgcc
 CHECK_CC_FLAGS = '$(CHECK_CC) -Wbitwise -Wno-return-void -no-compile $(ARCH)'
-RPM_DIR = $(HOME)/rpmbuild
+
+# move damage locally, this will also help make it easier to cleanup after the build
+RPM_DIR = $(shell pwd)/rpmbuild
 
 export PREFIX DESTDIR
 
@@ -84,13 +86,16 @@ install:
 	$(MAKE) -C man install $(PREFIX) $(DESTDIR) USR=$(USR)
 	test -d $(DESTDIR)/opt/mhvtl || mkdir -p $(DESTDIR)/opt/mhvtl
 
-$(RPM_DIR):
-	mkdir -p $(RPM_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-
 # setup depends rules to force creation of targets
 .PHONY: .FORCE
 
 .FORCE:
+
+# remake this each time..
+$(RPM_DIR): .FORCE
+	@echo "## Clean up on isle $(RPM_DIR)..."
+	test -d && rm -frv $(RPM_DIR)
+	mkdir -p $(RPM_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 #
 # rpm build process to be mroe flexible from git
