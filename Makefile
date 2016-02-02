@@ -27,7 +27,9 @@ MHVTL_CONFIG_PATH ?= /etc/mhvtl
 LIBDIR ?= /usr/lib
 CHECK_CC = cgcc
 CHECK_CC_FLAGS = '$(CHECK_CC) -Wbitwise -Wno-return-void -no-compile $(ARCH)'
-RPM_DIR = $(HOME)/rpmbuild
+
+# move damage locally, this will also help make it easier to cleanup after the build
+RPM_DIR = $(shell pwd)/rpmbuild
 
 export PREFIX DESTDIR
 
@@ -84,13 +86,16 @@ install:
 	$(MAKE) -C man install $(PREFIX) $(DESTDIR) USR=$(USR)
 	test -d $(DESTDIR)/opt/mhvtl || mkdir -p $(DESTDIR)/opt/mhvtl
 
-$(RPM_DIR):
-	mkdir -p $(RPM_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-
 # setup depends rules to force creation of targets
 .PHONY: .FORCE
 
 .FORCE:
+
+# remake this each time..
+$(RPM_DIR): .FORCE
+	@echo "## Clean up on isle $(RPM_DIR)..."
+	test -d && rm -frv $(RPM_DIR)
+	mkdir -p $(RPM_DIR)/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
 #
 # rpm build process to be mroe flexible from git
@@ -112,11 +117,8 @@ tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
 	@$(RM) -r mhvtl-$(FULL_VERSION)
 	gzip -f -9 $(TARFILE)
 
-srpm: tar
-	rpmbuild -ts $(TARFILE).gz
-
 rpm: tar
-	rpmbuild -ta $(TARFILE).gz
+	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl-utils bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz
 
 kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
@@ -126,8 +128,5 @@ kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	@$(RM) -r mhvtl-$(FULL_VERSION)
 	gzip -f -9 $(TARFILE)
 
-kmod-srpm: kmod-tar
-	rpmbuild -ts $(TARFILE).gz
-
 kmod-rpm: kmod-tar
-	rpmbuild -ta $(TARFILE).gz
+	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl-kmod bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz

@@ -1,14 +1,18 @@
 # Define the kmod package name here.
 %define kmod_name mhvtl
+#%%trace
+
+%global kmodtool /usr/lib/rpm/redhat/kmodtool
 
 # If kversion isn't defined on the rpmbuild line, define it here.
-%{!?kversion: %define kversion 2.6.32-573.7.1.el6.%{_target_cpu}}
+%{!?kversion: %define kversion 2.6.32-573.12.1.el6.%{_target_cpu}}
+%define kverrel %(%{kmodtool} verrel %{?kversion} 2>/dev/null)
 
 Summary: Virtual Tape Library device driver
 Name: %{kmod_name}-kmod
 %define real_version @@VERSION@@
 Version: 1.5
-Release: 3%{?dist}
+Release: 3.%(echo %{kversion} | tr - _)
 License: GPLv2
 Group: System Environment/Kernel
 URL: http://sites.google.com/site/linuxvtl2/
@@ -21,7 +25,7 @@ ExclusiveArch: i686 x86_64
 Source0: mhvtl-%{real_version}.tar.gz
 
 # Magic hidden here.
-%{expand:%(sh kernel/kmodtool-%{kmod_name}-el6.sh rpmtemplate %{kmod_name} %{kversion} "")}
+%{expand:%(%{kmodtool} rpmtemplate %{kmod_name} %{kversion} "" 2>/dev/null)}
 
 # Disable the building of the debug package(s).
 %define debug_package %{nil}
@@ -34,7 +38,6 @@ specific build.
 
 %prep
 %setup -n %{kmod_name}-%{real_version}/kernel/
-echo "override %{kmod_name} * weak-updates/%{kmod_name}" > kmod-%{kmod_name}.conf
 
 %build
 KSRC=%{_usrsrc}/kernels/%{kversion}
@@ -45,19 +48,16 @@ export INSTALL_MOD_PATH=%{buildroot}
 export INSTALL_MOD_DIR=extra/%{kmod_name}
 KSRC=%{_usrsrc}/kernels/%{kversion}
 %{__make} -C "${KSRC}" modules_install M=$PWD
-%{__install} -d %{buildroot}%{_sysconfdir}/depmod.d/
-%{__install} kmod-%{kmod_name}.conf %{buildroot}%{_sysconfdir}/depmod.d/
-%{__install} -d %{buildroot}%{_defaultdocdir}/kmod-%{kmod_name}-%{version}/
-%{__install} GPL-v2.0.txt %{buildroot}%{_defaultdocdir}/kmod-%{kmod_name}-%{version}/
 # Set the module(s) to be executable, so that they will be stripped when packaged.
 find %{buildroot} -type f -name \*.ko -exec %{__chmod} u+x \{\} \;
-# Remove the unrequired files.
-%{__rm} -f %{buildroot}/lib/modules/%{kversion}/modules.*
 
 %clean
 %{__rm} -rf %{buildroot}
 
 %changelog
+* Mon Feb 1 2016 Nic Henke <nic.henke@versity.com> - 1.5.3-2
+- Updated kmod rpm build to use upstream kmodtool framework from Fedora/Centos.
+
 * Mon Dec 28 2015 Nic Henke <nic.henke@versity.com> - 1.5.3-1
 - Updated to release 1.5.3, modular build process from git
 
