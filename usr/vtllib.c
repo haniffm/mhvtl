@@ -2,7 +2,7 @@
  * Shared routines between vtltape & vtllibrary
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,6 +54,7 @@
 #include "smc.h"
 #include "vtltape.h"
 #include "mode.h"
+#include "q.h"
 #include "ssc.h"
 #include "log.h"
 #include "q.h"
@@ -906,9 +907,12 @@ uint8_t clear_WORM(struct list_head *l)
 	struct mode *m;
 
 	m = lookup_pcode(l, MODE_MEDIUM_CONFIGURATION, 0);
-	MHVTL_DBG(3, "l: %p, m: %p, m->pcodePointer: %p",
+	if (!m) {
+		MHVTL_DBG(3, "Did not find MODE_MEDIUM_CONFIGURATION page");
+	} else {
+		MHVTL_DBG(3, "l: %p, m: %p, m->pcodePointer: %p",
 			l, m, m->pcodePointer);
-	if (m) {
+
 		smp_dp = m->pcodePointer;
 		if (!smp_dp)
 			return SAM_STAT_GOOD;
@@ -926,9 +930,12 @@ uint8_t set_WORM(struct list_head *l)
 	MHVTL_DBG(3, "*** Trace ***");
 
 	m = lookup_pcode(l, MODE_MEDIUM_CONFIGURATION, 0);
-	MHVTL_DBG(3, "l: %p, m: %p, m->pcodePointer: %p",
+	if (!m) {
+		MHVTL_DBG(3, "Did not find MODE_MEDIUM_CONFIGURATION page");
+	} else {
+		MHVTL_DBG(3, "l: %p, m: %p, m->pcodePointer: %p",
 			l, m, m->pcodePointer);
-	if (m) {
+
 		smp_dp = m->pcodePointer;
 		if (!smp_dp)
 			return SAM_STAT_GOOD;
@@ -1309,6 +1316,17 @@ unsigned int set_media_params(struct MAM *mamp, char *density)
 		memcpy(&mamp->media_info.density_name, "U-616  ", 6);
 		memcpy(&mamp->AssigningOrganization_1, "LTO-CVE", 7);
 		put_unaligned_be32(18441, &mamp->media_info.bits_per_mm);
+		mamp->max_partitions = 2;
+		mamp->num_partitions = 2;
+	} else if (!(strncmp(density, "LTO7", 4))) { /* FIXME */
+		mamp->MediumDensityCode = medium_density_code_lto7;
+		mamp->MediaType = Media_LTO7;
+		put_unaligned_be32(960, &mamp->MediumLength);
+		put_unaligned_be32(127, &mamp->MediumWidth);
+		memcpy(&mamp->media_info.description, "Ultrium 7/32T", 13);
+		memcpy(&mamp->media_info.density_name, "U-732  ", 6);
+		memcpy(&mamp->AssigningOrganization_1, "LTO-CVE", 7);
+		put_unaligned_be32(19107, &mamp->media_info.bits_per_mm);
 		mamp->max_partitions = 2;
 		mamp->num_partitions = 2;
 	} else if (!(strncmp(density, "AIT1", 4))) {

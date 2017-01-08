@@ -148,6 +148,8 @@ static int read_header(uint32_t blk_number, uint8_t *sam_stat)
 {
 	loff_t nread;
 
+	MHVTL_DBG(3, "Reading header for block %d", blk_number);
+
 	if (blk_number > eod_blk_number) {
 		MHVTL_ERR("Attempt to seek [%d] beyond EOD [%d]",
 				blk_number, eod_blk_number);
@@ -420,7 +422,7 @@ int position_to_block(uint32_t blk_number, uint8_t *sam_stat)
  * != 0, failure
 */
 
-int position_blocks_forw(uint32_t count, uint8_t *sam_stat)
+int position_blocks_forw(uint64_t count, uint8_t *sam_stat)
 {
 	uint32_t residual;
 	uint32_t blk_target;
@@ -480,7 +482,7 @@ int position_blocks_forw(uint32_t count, uint8_t *sam_stat)
  * != 0, failure
 */
 
-int position_blocks_back(uint32_t count, uint8_t *sam_stat)
+int position_blocks_back(uint64_t count, uint8_t *sam_stat)
 {
 	uint32_t residual;
 	uint32_t blk_target;
@@ -548,7 +550,7 @@ int position_blocks_back(uint32_t count, uint8_t *sam_stat)
  * != 0, failure
 */
 
-int position_filemarks_forw(uint32_t count, uint8_t *sam_stat)
+int position_filemarks_forw(uint64_t count, uint8_t *sam_stat)
 {
 	uint32_t residual;
 	unsigned int i;
@@ -586,7 +588,7 @@ int position_filemarks_forw(uint32_t count, uint8_t *sam_stat)
  * != 0, failure
 */
 
-int position_filemarks_back(uint32_t count, uint8_t *sam_stat)
+int position_filemarks_back(uint64_t count, uint8_t *sam_stat)
 {
 	uint32_t residual;
 	int i;
@@ -689,6 +691,7 @@ int create_tape(const char *pcl, const struct MAM *mamp, uint8_t *sam_stat)
 					newMedia, strerror(errno));
 			return 2;
 		}
+		rc = 0;
 	}
 
 	/* Don't really care if chown() fails or not..
@@ -1002,6 +1005,8 @@ int load_tape(const char *pcl, uint8_t *sam_stat)
 	if (eod_blk_number == 0)
 		eod_data_offset = 0;
 	else {
+		MHVTL_DBG(3, "Media format sanity check - Reading block before EOD: %d",
+					eod_blk_number - 1);
 		if (read_header(eod_blk_number - 1, sam_stat)) {
 			rc = 3;
 			goto failed;
@@ -1030,8 +1035,10 @@ int load_tape(const char *pcl, uint8_t *sam_stat)
 	posix_fadvise(indxfile, 0, 0, POSIX_FADV_DONTNEED);
 	posix_fadvise(datafile, 0, 0, POSIX_FADV_DONTNEED);
 
-	/* Now initialize raw_pos by reading in the first header, if any. */
+	/* Initialise SAM STATUS */
+	*sam_stat = SAM_STAT_GOOD;
 
+	/* Now initialize raw_pos by reading in the first header, if any. */
 	if (read_header(0, sam_stat)) {
 		rc = 3;
 		goto failed;
@@ -1331,7 +1338,8 @@ uint32_t read_tape_block(uint8_t *buf, uint32_t buf_size, uint8_t *sam_stat)
 	}
 
 	/* Now position to the following block. */
-
+	MHVTL_DBG(3, "Read block, now positioning to next header: %d",
+				raw_pos.hdr.blk_number + 1);
 	if (read_header(raw_pos.hdr.blk_number + 1, sam_stat)) {
 		MHVTL_ERR("Failed to read block header %d",
 				raw_pos.hdr.blk_number + 1);
@@ -1356,8 +1364,14 @@ uint64_t current_tape_block(void)
 	return 0;
 }
 
+uint64_t filemark_count(void)
+{
+	return (uint64_t)meta.filemark_count;
+}
+
 void print_raw_header(void)
 {
+	int i;
 	printf("Hdr:");
 	switch (raw_pos.hdr.blk_type) {
 	case B_DATA:
@@ -1384,12 +1398,27 @@ void print_raw_header(void)
 			raw_pos.hdr.blk_size,
 			raw_pos.hdr.blk_number,
 			raw_pos.data_offset);
-		if (raw_pos.hdr.blk_flags & BLKHDR_FLG_ENCRYPTED)
+		if (raw_pos.hdr.blk_flags & BLKHDR_FLG_ENCRYPTED) {
 			printf("   => Encr key length %d, ukad length %d, "
 				"akad length %d\n",
 				raw_pos.hdr.encryption.key_length,
 				raw_pos.hdr.encryption.ukad_length,
 				raw_pos.hdr.encryption.akad_length);
+			printf("       Key  : ");
+			for (i = 0; i < raw_pos.hdr.encryption.key_length; i++)
+				printf("%02x", raw_pos.hdr.encryption.key[i]);
+			if (raw_pos.hdr.encryption.ukad_length > 0) {
+				printf("\n       Ukad : ");
+				for (i = 0; i < raw_pos.hdr.encryption.ukad_length; i++)
+					printf("%02x", raw_pos.hdr.encryption.ukad[i]);
+			}
+			if (raw_pos.hdr.encryption.akad_length > 0) {
+				printf("\n       Akad : ");
+				for (i = 0; i < raw_pos.hdr.encryption.akad_length; i++)
+					printf("%02x", raw_pos.hdr.encryption.akad[i]);
+			}
+			puts("");
+		}
 		break;
 	case B_FILEMARK:
 		printf("         Filemark");

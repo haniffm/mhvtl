@@ -2,7 +2,7 @@
  * This handles any SCSI OP 'log sense / log select'
  *
  * Copyright (C) 2005 - 2011 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -103,9 +103,9 @@ struct	BufferUnderOverRun {
 struct	TapeUsage {
 	struct log_pg_header pcode_head;
 	struct pc_header flagNo01;
-	uint32_t value01;
+	uint32_t volumeMounts;
 	struct pc_header flagNo02;
-	uint64_t value02;
+	uint64_t volumeDatasetsWritten;
 	struct pc_header flagNo03;
 	uint32_t value03;
 	struct pc_header flagNo04;

@@ -7,7 +7,7 @@
  *   SCSI target daemons for both SMC and SSC devices.
  *
  * Copyright (C) 2005 - 2009 Mark Harvey       markh794@gmail.com
- *                                          mark_harvey@symantec.com
+ *                                          mark.harvey at veritas.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -94,8 +94,7 @@ static struct encryption encryption;
 #define	KEY		encryption.key
 
 #include <zlib.h>
-#include <lzo/lzoconf.h>
-#include <lzo/lzo1x.h>
+#include "minilzo.h"
 
 extern uint8_t last_cmd;
 
@@ -202,6 +201,8 @@ static struct tape_drives_table {
 	{ "ULT3580-TD4     ", init_ult3580_td4 },
 	{ "ULT3580-TD5     ", init_ult3580_td5 },
 	{ "ULT3580-TD6     ", init_ult3580_td6 },
+	{ "ULT3580-TD7     ", init_ult3580_td7 },
+	{ "ULT3580-HH7     ", init_ult3580_td7 },
 	{ "ULTRIUM-TD1     ", init_ult3580_td1 },
 	{ "ULTRIUM-TD2     ", init_ult3580_td2 },
 	{ "ULTRIUM-HH2     ", init_ult3580_td2 },
@@ -213,12 +214,15 @@ static struct tape_drives_table {
 	{ "ULTRIUM-HH5     ", init_ult3580_td5 },
 	{ "ULTRIUM-TD6     ", init_ult3580_td6 },
 	{ "ULTRIUM-HH6     ", init_ult3580_td6 },
+	{ "ULTRIUM-TD7     ", init_ult3580_td7 },
+	{ "ULTRIUM-HH7     ", init_ult3580_td7 },
 	{ "Ultrium 1-SCSI  ", init_hp_ult_1 },
 	{ "Ultrium 2-SCSI  ", init_hp_ult_2 },
 	{ "Ultrium 3-SCSI  ", init_hp_ult_3 },
 	{ "Ultrium 4-SCSI  ", init_hp_ult_4 },
 	{ "Ultrium 5-SCSI  ", init_hp_ult_5 },
 	{ "Ultrium 6-SCSI  ", init_hp_ult_6 },
+	{ "Ultrium 7-SCSI  ", init_hp_ult_7 },
 	{ "SDX-300C        ", init_ait1_ssc },
 	{ "SDX-500C        ", init_ait2_ssc },
 	{ "SDX-500V        ", init_ait2_ssc },
@@ -411,11 +415,18 @@ int resp_report_density(struct priv_lu_ssc *lu_priv, uint8_t media,
 		ds[0] = mam.MediumDensityCode;
 		ds[1] = mam.MediumDensityCode;
 		ds[2] = (OK_to_write) ? 0xa0 : 0x20; /* Set write OK flg */
-		put_unaligned_be16(REPORT_DENSITY_LEN, &ds[3]);
-		memcpy(&ds[5], &mam.media_info.bits_per_mm, 3);
-		memcpy(&ds[8], &mam.MediumWidth, 2);
-		memcpy(&ds[10], &mam.MediumLength, 2);
-		memcpy(&ds[12], &mam.max_capacity, 4);
+
+		a = get_unaligned_be32(&mam.media_info.bits_per_mm);
+		put_unaligned_be24(a, &ds[5]);
+
+		a = get_unaligned_be32(&mam.MediumWidth);
+		put_unaligned_be16(a, &ds[8]);
+
+		a = get_unaligned_be16(&mam.media_info.tracks);
+		put_unaligned_be16(a, &ds[10]);
+
+		a = get_unaligned_be32(&mam.max_capacity);
+		put_unaligned_be32(a, &ds[12]);
 
 		snprintf((char *)&ds[16], 9, "%-8s",
 					mam.AssigningOrganization_1);
@@ -454,7 +465,7 @@ int resp_report_density(struct priv_lu_ssc *lu_priv, uint8_t media,
 			ds += REPORT_DENSITY_LEN;
 		}
 	}
-	put_unaligned_be16(REPORT_DENSITY_LEN * count, &buf[0]);
+	put_unaligned_be16((REPORT_DENSITY_LEN * count) + 2, &buf[0]);
 	return REPORT_DENSITY_LEN * count + 4;
 }
 
@@ -618,6 +629,9 @@ static int uncompress_lzo_block(uint8_t *buf, uint32_t tgtsize, uint8_t *sam_sta
 		return 0;
 	}
 
+	/* Can't reference c_pos after this point
+	 * read_tape_block increments c_pos to next block header
+	 */
 	nread = read_tape_block(cbuf, disk_blk_size, sam_stat);
 	if (nread != disk_blk_size) {
 		MHVTL_ERR("read failed, %s", strerror(errno));
@@ -638,7 +652,7 @@ static int uncompress_lzo_block(uint8_t *buf, uint32_t tgtsize, uint8_t *sam_sta
 
 	if (tgtsize >= blk_size) {
 		/* block sizes match, uncompress directly into buf */
-		z = lzo1x_decompress(cbuf, disk_blk_size, buf, &uncompress_sz, NULL);
+		z = lzo1x_decompress_safe(cbuf, disk_blk_size, buf, &uncompress_sz, NULL);
 	} else {
 		/* Initiator hasn't requested same size as data block */
 		c2buf = (uint8_t *)malloc(uncompress_sz);
@@ -648,22 +662,44 @@ static int uncompress_lzo_block(uint8_t *buf, uint32_t tgtsize, uint8_t *sam_sta
 			free(cbuf);
 			return 0;
 		}
-		z = lzo1x_decompress(cbuf, disk_blk_size, c2buf, &uncompress_sz, NULL);
+		z = lzo1x_decompress_safe(cbuf, disk_blk_size, c2buf, &uncompress_sz, NULL);
 		/* Now copy 'requested size' of data into buffer */
 		memcpy(buf, c2buf, tgtsize);
 		free(c2buf);
 	}
 
-	if (z == LZO_E_OK) {
+	switch (z) {
+	case LZO_E_OK:
 		MHVTL_DBG(2, "Read %u bytes of lzo compressed"
 				" data, have %u bytes for result",
 				(uint32_t)nread, blk_size);
-	} else {
-		MHVTL_ERR("Decompression error");
-		sam_medium_error(E_DECOMPRESSION_CRC, sam_stat);
-		rc = 0;
+		goto complete;
+		break;
+	case LZO_E_INPUT_NOT_CONSUMED:
+		MHVTL_DBG(1, "The end of compressed block has been detected before all %d bytes",
+				blk_size);
+		break;
+	case LZO_E_INPUT_OVERRUN:
+		MHVTL_ERR("The decompressor requested more bytes from the compressed block");
+		break;
+	case LZO_E_OUTPUT_OVERRUN:
+		MHVTL_ERR("The decompressor requested to write more bytes than the uncompressed block can hold");
+		break;
+	case LZO_E_LOOKBEHIND_OVERRUN:
+		MHVTL_ERR("Look behind overrun - data is corrupted");
+		break;
+	case LZO_E_EOF_NOT_FOUND:
+		MHVTL_ERR("No EOF code was found in the compressed block");
+		break;
+	case LZO_E_ERROR:
+		MHVTL_ERR("Data is corrupt - generic lzo error received");
+		break;
 	}
 
+	sam_medium_error(E_DECOMPRESSION_CRC, sam_stat);
+	rc = 0;
+
+complete:
 	free(cbuf);
 
 	return rc;
@@ -1123,7 +1159,7 @@ int writeBlock(struct scsi_cmd *cmd, uint32_t src_sz)
 /*
  * Space over (to) x filemarks. Setmarks not supported as yet.
  */
-void resp_space(int32_t count, int code, uint8_t *sam_stat)
+void resp_space(int64_t count, int code, uint8_t *sam_stat)
 {
 	struct s_sd sd;
 
@@ -1717,6 +1753,7 @@ static int loadTape(char *PCL, uint8_t *sam_stat)
 			fg = TA_MEDIA_NOT_SUPPORTED;
 			update_TapeAlert(lu, fg);
 		}
+		MHVTL_LOG("Tape Load (%s) failed with status: %d", PCL, rc);
 		return rc;
 	}
 
@@ -1730,6 +1767,8 @@ static int loadTape(char *PCL, uint8_t *sam_stat)
 			lookup_media_type(lu_ssc.pm->media_handling,
 							mam.MediaType),
 			mam.MediumSerialNumber);
+
+	rewind_tape(sam_stat);
 
 	lu_ssc.max_capacity = get_unaligned_be64(&mam.max_capacity);
 
@@ -1960,7 +1999,7 @@ static char *strip_PCL(char *p, int start)
 return p;
 }
 
-void unloadTape(uint8_t *sam_stat)
+void unloadTape(struct q_msg *msg, uint8_t *sam_stat)
 {
 	struct lu_phy_attr *lu = lu_ssc.pm->lu;
 
@@ -1976,6 +2015,7 @@ void unloadTape(uint8_t *sam_stat)
 			lu_ssc.cleaning_media_state = NULL;
 		lu_ssc.pm->media_load(lu, TAPE_UNLOADED);
 		delay_opcode(DELAY_UNLOAD, lu_ssc.delay_unload);
+		send_msg("ejected", msg->snd_id);
 		break;
 	default:
 		MHVTL_DBG(2, "Tape not mounted");
@@ -2033,7 +2073,7 @@ static int processMessageQ(struct q_msg *msg, uint8_t *sam_stat)
 
 	if (!strncmp(msg->text, "unload", 6)) {
 		MHVTL_DBG(1, "Library requested tape unload");
-		unloadTape(sam_stat);
+		unloadTape(msg, sam_stat);
 	}
 
 	if (!strncmp(msg->text, "exit", 4))
@@ -2279,7 +2319,7 @@ static struct device_type_template ssc_ops = {
 
 		/* 0x10 -> 0x1f */
 		{ssc_write_filemarks,},
-		{ssc_space,},
+		{ssc_space_6,},
 		{spc_inquiry,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -2395,7 +2435,7 @@ static struct device_type_template ssc_ops = {
 
 		/* 0x90 -> 0x9f */
 		{spc_illegal_op,},
-		{spc_illegal_op,},
+		{ssc_space_16,},
 		{ssc_locate,},
 		{spc_illegal_op,},
 		{spc_illegal_op,},
@@ -2778,7 +2818,6 @@ int main(int argc, char *argv[])
 
 	/* Message Q */
 	int	mlen, r_qid;
-	struct q_entry r_entry;
 
 	memset(&vtl_cmd, 0, sizeof(struct vtl_header));
 	memset(&ctl, 0, sizeof(struct vtl_ctl));
@@ -2984,9 +3023,9 @@ int main(int argc, char *argv[])
 
 	for (;;) {
 		/* Check for anything in the messages Q */
-		mlen = msgrcv(r_qid, &r_entry, MAXOBN, my_id, IPC_NOWAIT);
+		mlen = msgrcv(r_qid, &lu_ssc.r_entry, MAXOBN, my_id, IPC_NOWAIT);
 		if (mlen > 0) {
-			if (processMessageQ(&r_entry.msg, &lu_ssc.sam_status))
+			if (processMessageQ(&lu_ssc.r_entry.msg, &lu_ssc.sam_status))
 				goto exit;
 		} else if (mlen < 0) {
 			if ((r_qid = init_queue()) == -1) {
@@ -3059,7 +3098,6 @@ int main(int argc, char *argv[])
 				else
 					current_state = MHVTL_STATE_IDLE;
 			}
-
 		}
 	}
 

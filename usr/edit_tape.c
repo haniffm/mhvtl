@@ -6,7 +6,7 @@
  *   SCSI target daemons for both SMC and SSC devices.
  *
  * Copyright (C) 2005 - 2013 Mark Harvey       markh794@gmail.com
- *                                          mark_harvey@symantec.com
+ *                                          mark.harvey at veritas.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -76,7 +76,7 @@ void usage(char *progname)
 	printf("           DLT3     DLT4\n");
 	printf("           SDLT1    SDLT220  SDLT320  SDLT600\n");
 	printf("           LTO1     LTO2     LTO3     LTO4\n");
-	printf("           LTO5     LTO6\n");
+	printf("           LTO5     LTO6     LTO7\n");
 	printf("           T10KA    T10KB    T10KC\n");
 	printf("           9840A    9840B    9840C    9840D\n");
 	printf("           9940A    9940B\n");

@@ -7,7 +7,7 @@
  *   SCSI target daemons for both SMC and SSC devices.
  *
  * Copyright (C) 2005 - 2009 Mark Harvey       markh794@gmail.com
- *                                          mark_harvey@symantec.com
+ *                                          mark.harvey at veritas.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -85,6 +85,8 @@ extern int current_state;	/* scope, Global -> Last status sent to fifo */
 struct lu_phy_attr lunit;
 
 static struct smc_priv smc_slots;
+
+struct s_info *add_new_slot(struct lu_phy_attr *lu);
 
 static void usage(char *progname)
 {
@@ -525,6 +527,42 @@ static void close_map(struct q_msg *msg)
 	send_msg("OK", msg->snd_id);
 }
 
+/* add new slot && assignment && initialization memory */
+static void add_storage_slot(struct q_msg *msg)
+{
+	int buffer_size;
+	int slt_no;
+	char message[20];
+	struct s_info *sp1 = NULL;
+	struct smc_priv *smc_p = lunit.lu_private;
+
+	sp1 = add_new_slot(&lunit);
+
+	smc_p->num_storage++;
+	slt_no = smc_p->num_storage;
+	sp1->element_type = STORAGE_ELEMENT;
+	sp1->status = STATUS_Access;
+	sp1->slot_location = slt_no + smc_p->pm->start_storage - 1;
+
+	/* Slot status to Empty */
+	setSlotEmpty(sp1);
+
+	init_smc_log_pages(&lunit);
+	init_smc_mode_pages(&lunit);
+	MHVTL_DBG(1, "add slot && init smc");
+
+	/* malloc a big enough buffer to fit worst case read element status */
+	buffer_size = (smc_slots.num_drives + smc_slots.num_picker
+			+ smc_slots.num_map + smc_slots.num_storage) * 80;
+	buffer_size = max(SMC_BUF_SIZE, buffer_size);
+	smc_slots.bufsize = buffer_size;
+	MHVTL_DBG(1, "Setting buffer size to %d", buffer_size);
+
+	sprintf(message, "slot=%d", slt_no);
+	send_msg(message, msg->snd_id);
+	return;
+}
+
 /*
  * Respond to messageQ 'empty map' by clearing 'ocuplied' status in map slots.
  * Return 0 on failure, non-zero - success.
@@ -553,6 +591,25 @@ static int empty_map(struct q_msg *msg)
 	return 1;
 }
 
+/* Extract the id of the tape sending notification a tape was ejected
+ * Set the 'access' bit in the READ_ELEMENT_STATUS page
+ */
+static int set_access_bit(struct q_msg *msg)
+{
+	struct s_info *sp;
+	struct list_head *slot_head = &smc_slots.slot_list;
+
+	list_for_each_entry(sp, slot_head, siblings) {
+		if (slotOccupied(sp) && sp->element_type == DATA_TRANSFER) {
+			if (sp->drive->drv_id == msg->snd_id) {
+				setAccessStatus(sp, 1);
+				MHVTL_DBG(2, "Resetting access bit for drive id %ld", sp->drive->drv_id);
+			}
+		}
+	}
+	return 0;
+}
+
 /*
  * Return 1, exit program
  */
@@ -569,8 +626,12 @@ static int processMessageQ(struct q_msg *msg)
 			verbose = 2;
 		}
 	}
+	if (!strncmp(msg->text, "add slot", 8))
+		add_storage_slot(msg);
 	if (!strncmp(msg->text, "empty map", 9))
 		empty_map(msg);
+	if (!strncmp(msg->text, "ejected", 7))
+		set_access_bit(msg);
 	if (!strncmp(msg->text, "exit", 4))
 		return 1;
 	if (!strncmp(msg->text, "open map", 8))
@@ -1479,6 +1540,12 @@ static void customise_stk_lu(struct lu_phy_attr *lu)
 {
 	if (!strncasecmp(lu->product_id, "SL500", 5))
 		init_stkslxx(lu);	/* STK SL series */
+	else if (!strncasecmp(lu->product_id, "L20", 3))
+		init_stkl20(lu);	/* L20/40/80 */
+	else if (!strncasecmp(lu->product_id, "L40", 3))
+		init_stkl20(lu);	/* L20/40/80 */
+	else if (!strncasecmp(lu->product_id, "L80", 3))
+		init_stkl20(lu);	/* L20/40/80 */
 	else
 		init_stklxx(lu);	/* STK L series */
 }
@@ -1558,7 +1625,7 @@ void rereadconfig(int sig)
 
 void smc_personality_module_register(struct smc_personality_template *pm)
 {
-	MHVTL_DBG(2, "%s", pm->name);
+	MHVTL_LOG("%s", pm->name);
 	smc_slots.pm = pm;
 }
 
@@ -1872,6 +1939,14 @@ int main(int argc, char *argv[])
 			fflush(NULL);	/* So I can pipe debug o/p thru tee */
 			switch (ret) {
 			case VTL_QUEUE_CMD:
+				if (smc_slots.bufsize != buffer_size) {
+					buffer_size = smc_slots.bufsize;
+					buf = realloc(buf, buffer_size);
+					if (!buf) {
+						perror("Problems allocating memory");
+						exit(1);
+					}
+				}
 				process_cmd(cdev, buf, &vtl_cmd, pollInterval);
 				pollInterval = MIN_SLEEP_TIME;
 				break;

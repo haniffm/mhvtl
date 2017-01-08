@@ -2,7 +2,7 @@
  * This handles any SCSI OP codes defined in the standards as 'PRIMARY'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@
 #include "vtl_common.h"
 #include "vtllib.h"
 #include "logging.h"
+#include "q.h"
 #include "ssc.h"
 
 extern unsigned char sense[];

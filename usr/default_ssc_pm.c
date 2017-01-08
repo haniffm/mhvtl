@@ -2,7 +2,7 @@
  * This handles any SCSI OP codes defined in the standards as 'STREAM'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,10 +41,10 @@
 #include "vtl_common.h"
 #include "vtllib.h"
 #include "logging.h"
+#include "q.h"
 #include "ssc.h"
 #include "spc.h"
 #include "vtltape.h"
-#include "q.h"
 #include "mode.h"
 #include "log.h"
 
@@ -89,6 +89,12 @@ static struct name_to_media_info media_info[] = {
 			media_type_lto6_data, medium_density_code_lto6},
 	{"LTO6 WORM", Media_LTO6_WORM,
 			media_type_lto6_worm, medium_density_code_lto6},
+	{"LTO7", Media_LTO7,
+			media_type_lto7_data, medium_density_code_lto7},
+	{"LTO7 Clean", Media_LTO7_CLEAN,
+			media_type_lto7_data, medium_density_code_lto7},
+	{"LTO7 WORM", Media_LTO7_WORM,
+			media_type_lto7_worm, medium_density_code_lto7},
 
 	/* IBM 03592 media */
 	{"03592 JA", Media_3592_JA,

@@ -2,7 +2,7 @@
  * This handles any SCSI OP 'mode sense / mode select'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 #include "list.h"
 #include "logging.h"
 #include "vtllib.h"
+#include "q.h"
 #include "ssc.h"
 #include "smc.h"
 #include "be_byteshift.h"
@@ -59,6 +60,7 @@ static char *mode_ait_device_configuration = "AIT Device Configuration";
 static char *mode_element_address = "Element Address";
 static char *mode_transport_geometry = "Transport Geometry";
 static char *mode_device_capabilities = "Device Capabilities";
+static char *drive_configuration_page = "STK Vendor-Unique Drive Configuration";
 
 struct mode *lookup_pcode(struct list_head *m, uint8_t pcode, uint8_t subpcode)
 {
@@ -197,7 +199,7 @@ int add_mode_disconnect_reconnect(struct lu_phy_attr *lu)
 	mode_pg = &lu->mode_pg;
 	pcode = MODE_DISCONNECT_RECONNECT;
 	subpcode = 0;
-	size = 12;
+	size = 0x0e + 2;
 
 	MHVTL_DBG(3, "Adding mode page %s (%02x/%02x)",
 				mode_disconnect_reconnect, pcode, subpcode);
@@ -486,9 +488,24 @@ int add_mode_medium_partition(struct lu_phy_attr *lu)
 				 - sizeof(mp->pcodePointer[0])
 				 - sizeof(mp->pcodePointer[1]);
 
+	/* FDP (Fixed Data Partitions) |
+	 *	PSUM (partition size unit of measure) |
+	 *	POFM (partition on Format Medium) */
+	mp->pcodePointerBitMap[4] = 0x9c;
+	/* Medium Format Recognition */
+	mp->pcodePointerBitMap[5] = 0x03;
+	mp->pcodePointerBitMap[6] = 0x09;
+	mp->pcodePointerBitMap[8] = 0x03;
+	mp->pcodePointerBitMap[9] = 0x5a;
+
 	/* And copy pcode/size into bitmap structure */
 	mp->pcodePointerBitMap[0] = mp->pcodePointer[0];
 	mp->pcodePointerBitMap[1] = mp->pcodePointer[1];
+	mp->pcodePointerBitMap[4] = mp->pcodePointer[4];
+	mp->pcodePointerBitMap[5] = mp->pcodePointer[5];
+	mp->pcodePointerBitMap[6] = mp->pcodePointer[6];
+	mp->pcodePointerBitMap[8] = mp->pcodePointer[8];
+	mp->pcodePointerBitMap[9] = mp->pcodePointer[9];
 
 	mp->description = mode_medium_partition;
 
@@ -976,3 +993,42 @@ int update_prog_early_warning(struct lu_phy_attr *lu)
 	}
 	return SAM_STAT_GOOD;
 }
+
+int add_smc_mode_page_drive_configuration(struct lu_phy_attr *lu)
+{
+	struct list_head *mode_pg;
+	struct mode *mp;
+	uint8_t pcode;
+	uint8_t subpcode;
+	uint8_t size;
+
+	mode_pg = &lu->mode_pg;
+	/* A Vendor-specific page for the StorageTek L20, L40 and L80 libraries */
+	pcode = 0x2d;
+	subpcode = 0;
+	size = 0x26;
+/*
+ * FIXME: Need to fill in details from Table 4-21 L20 SCSI Reference Manual
+ */
+
+	MHVTL_DBG(3, "Adding mode page %s (%02x/%02x)",
+				drive_configuration_page, pcode, subpcode);
+
+	mp = alloc_mode_page(mode_pg, pcode, subpcode, size);
+	if (!mp)
+		return -ENOMEM;
+
+	mp->pcodePointer[0] = pcode;
+	mp->pcodePointer[1] = size
+				 - sizeof(mp->pcodePointer[0])
+				 - sizeof(mp->pcodePointer[1]);
+
+	/* And copy pcode/size into bitmap structure */
+	mp->pcodePointerBitMap[0] = mp->pcodePointer[0];
+	mp->pcodePointerBitMap[1] = mp->pcodePointer[1];
+
+	mp->description = drive_configuration_page;
+
+	return 0;
+}
+
