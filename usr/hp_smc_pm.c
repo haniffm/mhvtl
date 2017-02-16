@@ -15,11 +15,8 @@
 static void update_eml_vpd_80(struct lu_phy_attr *lu)
 {
 	struct vpd **lu_vpd = lu->lu_vpd;
-	struct smc_priv *smc_p = lu->lu_private;
 	uint8_t *d;
 	int pg;
-
-	smc_p = lu->lu_private;
 
 	/* Unit Serial Number */
 	pg = PCODE_OFFSET(0x80);
@@ -139,6 +136,11 @@ void init_hp_msl_smc(struct lu_phy_attr *lu)
 	smc_pm.start_storage	= 0x0020;
 	smc_pm.start_drive	= 0x01e0;
 	smc_pm.start_map	= 0x01c0;
+	smc_pm.dvcid_len	= 20,
+	smc_pm.dvcid_serial_only = TRUE,
+	smc_pm.no_dvcid_flag	 = TRUE,
+
+	lu->inquiry[2] = 2;	/* Set SCSI-2 Approved Version */
 
 	smc_personality_module_register(&smc_pm);
 

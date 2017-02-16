@@ -2,7 +2,7 @@
  * The shared library libvtlscsi.so function defs
  *
  * Copyright (C) 2005-2012 Mark Harvey markh794@gmail.com
- *                                  mark_harvey@symantec.com
+ *                                  mark.harvey at veritas.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -266,6 +266,9 @@ enum Media_Type_list {
 	Media_LTO6,
 	Media_LTO6_CLEAN,
 	Media_LTO6_WORM,
+	Media_LTO7,
+	Media_LTO7_CLEAN,
+	Media_LTO7_WORM,
 	Media_3592_JA,
 	Media_3592_JA_CLEAN,
 	Media_3592_JW,

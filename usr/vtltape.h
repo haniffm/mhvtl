@@ -4,7 +4,7 @@
  * $Id: vtltape.h,v 1.1.2.1 2006-08-06 07:58:44 markh Exp $
  *
  * Copyright (C) 2005 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -89,6 +89,7 @@ struct blk_header {
 #define medium_density_code_lto4	0x46
 #define medium_density_code_lto5	0x58
 #define medium_density_code_lto6	0x5a
+#define medium_density_code_lto7	0x5c
 
 #define medium_density_code_j1a		0x51
 #define medium_density_code_e05		0x52
@@ -158,6 +159,8 @@ struct blk_header {
 #define media_type_lto5_worm	0x5c
 #define media_type_lto6_data	0x68
 #define media_type_lto6_worm	0x6c
+#define media_type_lto7_data	0x78
+#define media_type_lto7_worm	0x7c
 #define media_type_hp_lto_data	0x00
 #define media_type_hp_lto_worm	0x01
 #define media_type_hp_lto_cd	0x80
@@ -183,10 +186,10 @@ void unload_tape(uint8_t *sam_stat);
 int rewind_tape(uint8_t *sam_stat);
 int position_to_eod(uint8_t *sam_stat);
 int position_to_block(uint32_t blk_no, uint8_t *sam_stat);
-int position_blocks_forw(uint32_t count, uint8_t *sam_stat);
-int position_blocks_back(uint32_t count, uint8_t *sam_stat);
-int position_filemarks_forw(uint32_t count, uint8_t *sam_stat);
-int position_filemarks_back(uint32_t count, uint8_t *sam_stat);
+int position_blocks_forw(uint64_t count, uint8_t *sam_stat);
+int position_blocks_back(uint64_t count, uint8_t *sam_stat);
+int position_filemarks_forw(uint64_t count, uint8_t *sam_stat);
+int position_filemarks_back(uint64_t count, uint8_t *sam_stat);
 
 uint32_t read_tape_block(uint8_t *buf, uint32_t size, uint8_t *sam_stat);
 
@@ -199,6 +202,7 @@ int format_tape(uint8_t *sam_stat);
 int rewriteMAM(uint8_t *sam_stat);
 uint64_t current_tape_offset(void);
 uint64_t current_tape_block(void);
+uint64_t filemark_count(void);
 
 void print_raw_header(void);
 void print_filemark_count(void);

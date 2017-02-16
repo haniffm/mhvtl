@@ -2,7 +2,7 @@
  * This handles any SCSI OP codes defined in the standards as 'STREAM'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,9 +42,9 @@
 #include "logging.h"
 #include "vtllib.h"
 #include "spc.h"
+#include "q.h"
 #include "ssc.h"
 #include "vtltape.h"
-#include "q.h"
 #include "log.h"
 #include "mode.h"
 
@@ -1459,12 +1459,12 @@ uint8_t ssc_erase(struct scsi_cmd *cmd)
 	return SAM_STAT_GOOD;
 }
 
-uint8_t ssc_space(struct scsi_cmd *cmd)
+uint8_t ssc_space_6(struct scsi_cmd *cmd)
 {
 	uint8_t *sam_stat;
-	int count;
-	int icount;
-	int code;
+	uint32_t count;
+	int32_t icount;
+	uint8_t code;
 	struct s_sd sd;
 
 	sam_stat = &cmd->dbuf_p->sam_stat;
@@ -1480,10 +1480,65 @@ uint8_t ssc_space(struct scsi_cmd *cmd)
 	   should be treated as a twos-complement negative number.
 	*/
 
-	if (count >= 0x800000)
+	if (cmd->scb[2] >= 0x80) /* MSB of the count field */
 		icount = -(0xffffff - count + 1);
 	else
 		icount = (int32_t)count;
+
+	switch (code) {
+	case 0:	/* Logical blocks - supported */
+		MHVTL_DBG(1, "SPACE (%ld) ** %s %d block%s",
+			(long)cmd->dbuf_p->serialNo,
+			(icount >= 0) ? "forward" : "back",
+			abs(icount),
+			(1 == abs(icount)) ? "" : "s");
+		break;
+	case 1:	/* Filemarks - supported */
+		MHVTL_DBG(1, "SPACE (%ld) ** %s %d filemark%s",
+			(long)cmd->dbuf_p->serialNo,
+			(icount >= 0) ? "forward" : "back",
+			abs(icount),
+			(1 == abs(icount)) ? "" : "s");
+		break;
+	case 3:	/* End of Data - supported */
+		MHVTL_DBG(1, "SPACE (%ld) ** %s ",
+			(long)cmd->dbuf_p->serialNo,
+			"to End-of-data");
+		break;
+	case 2:	/* Sequential filemarks currently not supported */
+	default: /* obsolete / reserved values */
+		MHVTL_DBG(1, "SPACE (%ld) ** - Unsupported option %d",
+			(long)cmd->dbuf_p->serialNo,
+			code);
+
+		sd.byte0 = SKSV | CD | BPV | code;
+		sd.field_pointer = 1;
+		sam_illegal_request(E_INVALID_FIELD_IN_PARMS, &sd, sam_stat);
+		return SAM_STAT_CHECK_CONDITION;
+		break;
+	}
+
+	if (icount != 0 || code == 3)
+		resp_space(icount, code, sam_stat);
+
+	return *sam_stat;
+}
+
+uint8_t ssc_space_16(struct scsi_cmd *cmd)
+{
+	uint8_t *sam_stat;
+	int64_t icount;
+	uint8_t code;
+	struct s_sd sd;
+
+	sam_stat = &cmd->dbuf_p->sam_stat;
+
+	*sam_stat = SAM_STAT_GOOD;
+
+	current_state = MHVTL_STATE_POSITIONING;
+
+	icount = get_unaligned_be64(&cmd->scb[4]);
+	code = cmd->scb[1] & 0x0f;
 
 	switch (code) {
 	case 0:	/* Logical blocks - supported */
@@ -1560,8 +1615,9 @@ uint8_t ssc_load_unload(struct scsi_cmd *cmd)
 		break;
 
 	case TAPE_LOADED:
+		rewind_tape(sam_stat);
 		if (!load)
-			unloadTape(sam_stat);
+			unloadTape(&lu_priv->r_entry.msg, sam_stat);
 		break;
 
 	default:
@@ -1624,6 +1680,26 @@ uint8_t ssc_pr_in(struct scsi_cmd *cmd)
 		return SAM_STAT_RESERVATION_CONFLICT;
 	else
 		return resp_spc_pri(cmd->scb, cmd->dbuf_p);
+}
+
+static void update_tape_usage(struct TapeUsage *b,
+				struct priv_lu_ssc *lu_ssc)
+{
+	uint64_t datasets = filemark_count();
+	uint64_t load_count;
+
+	/* if we have more than 1 filemark,
+	 * most apps write 2 filemarks to flag EOD
+	 * So, lets subtract one from the filemark count to
+	 * present a more accurate 'Data Set' count
+	 */
+	if (datasets > 1)
+		datasets--;
+
+	load_count = get_unaligned_be64(&lu_ssc->mamp->LoadCount);
+	put_unaligned_be32(load_count, &b->volumeMounts);
+
+	put_unaligned_be64(datasets, &b->volumeDatasetsWritten);
 }
 
 static void update_seq_access_counters(struct seqAccessDevice *sa,
@@ -1758,6 +1834,7 @@ uint8_t ssc_log_sense(struct scsi_cmd *cmd)
 			goto log_page_not_found;
 
 		b = memcpy(b, l->p, l->size);
+		update_tape_usage((struct TapeUsage *)b, lu_ssc);
 		retval = l->size;
 		break;
 	case TAPE_CAPACITY: {	/* Tape Capacity page */

@@ -2,7 +2,7 @@
  * This handles any SCSI OP 'mode sense / mode select'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,3 +44,4 @@ int add_mode_transport_geometry(struct lu_phy_attr *lu);
 int add_mode_element_address_assignment(struct lu_phy_attr *lu);
 int update_prog_early_warning(struct lu_phy_attr *lu);
 void dealloc_all_mode_pages(struct lu_phy_attr *lu);
+int add_smc_mode_page_drive_configuration(struct lu_phy_attr *lu);

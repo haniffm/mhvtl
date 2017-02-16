@@ -2,7 +2,7 @@
  * This handles any SCSI OP codes defined in the standards as 'STREAM'
  *
  * Copyright (C) 2005 - 2012 Mark Harvey markh794@gmail.com
- *                                mark_harvey@symantec.com
+ *                                mark.harvey at veritas.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,10 +41,10 @@
 #include "vtl_common.h"
 #include "vtllib.h"
 #include "logging.h"
+#include "q.h"
 #include "ssc.h"
 #include "spc.h"
 #include "vtltape.h"
-#include "q.h"
 #include "mode.h"
 #include "log.h"
 

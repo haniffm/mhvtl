@@ -2,7 +2,7 @@
  * This handles any SCSI OP codes defined in the standards as 'MEDIUM CHANGER'
  *
  * Copyright (C) 2005 - 2009 Mark Harvey markh794 at gmail dot com
- *                                mark_harvey at symantec dot com
+ *                                mark.harvey at veritas dot com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -161,6 +161,12 @@ static struct d_info *drive2struct(struct smc_priv *smc_p, int addr)
 	return NULL;
 }
 
+/* returns true if medium transport access to slot is OK */
+int slotAccess(struct s_info *s)
+{
+	return s->status & STATUS_Access;
+}
+
 /* Returns true if slot has media in it */
 int slotOccupied(struct s_info *s)
 {
@@ -203,18 +209,16 @@ static void setExEnableStatus(struct s_info *s, int flg)
 */
 
 /*
- * A value of 1 indicates that a cartridge may be moved to/from
- * the drive (but not both).
+ * 1 / 0 Set/Clear the Access bit.
+ * Access bit when set, indicates the medium transport can access media
  */
-/*
-static void setAccessStatus(struct s_info *s, int flg)
+void setAccessStatus(struct s_info *s, int flg)
 {
 	if (flg)
 		s->status |= STATUS_Access;
 	else
 		s->status &= ~STATUS_Access;
 }
-*/
 
 /*
  * Reset to 0 indicates it is in normal state, set to 1 indicates an Exception
@@ -262,6 +266,8 @@ void setSlotEmpty(struct s_info *s)
 static void setDriveEmpty(struct d_info *d)
 {
 	setFullStatus(d->slot, 0);
+	/* If empty, the picker arm can't access media */
+	setAccessStatus(d->slot, 0);
 }
 
 void setSlotFull(struct s_info *s)
@@ -405,7 +411,10 @@ static int sizeof_element(struct scsi_cmd *cmd, int type)
 	int voltag;
 
 	voltag = (cmd->scb[1] & 0x10) >> 4;
-	dvcid = cmd->scb[6] & 0x01;	/* Device ID */
+	if (smc_p->pm->no_dvcid_flag)
+		dvcid = 1;
+	else
+		dvcid = cmd->scb[6] & 0x01;	/* Device ID */
 
 	return 16 + (voltag ? VOLTAG_LEN : 0) +
 		(dvcid && (type == DATA_TRANSFER) ? smc_p->pm->dvcid_len : 0);
@@ -425,7 +434,10 @@ static int fill_ed(struct scsi_cmd *cmd, uint8_t *p, struct s_info *s)
 	uint8_t dvcid;
 
 	voltag = (cmd->scb[1] & 0x10) >> 4;
-	dvcid = cmd->scb[6] & 0x01;	/* Device ID */
+	if (smc_p->pm->no_dvcid_flag)
+		dvcid = 1;
+	else
+		dvcid = cmd->scb[6] & 0x01;	/* Device ID */
 
 	/* Should never occur, but better to trap then core */
 	if (!s) {
@@ -513,7 +525,8 @@ static int fill_ed(struct scsi_cmd *cmd, uint8_t *p, struct s_info *s)
 
 	if (dvcid && s->element_type == DATA_TRANSFER) {
 		p[j++] = 2;	/* Code set 2 = ASCII */
-		p[j++] = 1;	/* Identifier type */
+		/* Identifier type - If serial number only - 0, otherwise 1 */
+		p[j++] = smc_p->pm->dvcid_serial_only ? 0 : 1;
 		p[j++] = 0;	/* Reserved */
 		p[j++] = smc_p->pm->dvcid_len;	/* Identifier Length */
 		if (smc_p->pm->dvcid_serial_only) {
@@ -534,7 +547,7 @@ static int fill_ed(struct scsi_cmd *cmd, uint8_t *p, struct s_info *s)
 		p[j++] = 0;	/* Reserved */
 		p[j++] = 0;	/* Reserved */
 	}
-	MHVTL_DBG(3, "Returning %d (0x%02x) bytes", j, j);
+	MHVTL_DBG(3, "Element Descriptor - Returning %d (0x%02x) bytes", j, j);
 
 return j;
 }
@@ -546,10 +559,12 @@ static void fill_element_status_page_hdr(struct scsi_cmd *cmd, uint8_t *p,
 					uint16_t element_count,
 					uint8_t type)
 {
+	struct smc_priv *smc_p;
 	int element_sz;
 	uint32_t element_len;
 	uint8_t voltag;
 
+	smc_p = (struct smc_priv *)cmd->lu->lu_private;
 	voltag = (cmd->scb[1] & 0x10) >> 4;
 
 	element_sz = sizeof_element(cmd, type);
@@ -558,6 +573,8 @@ static void fill_element_status_page_hdr(struct scsi_cmd *cmd, uint8_t *p,
 
 	/* Primary Volume Tag set - Returning Barcode info */
 	p[1] = (voltag == 0) ? 0 : 0x80;
+	if (smc_p->pm->dvcid_serial_only && type == DATA_TRANSFER)
+		p[1] |= 0x40;	/* Set AVolTag */
 
 	/* Number of bytes per element */
 	put_unaligned_be16(element_sz, &p[2]);
@@ -792,7 +809,11 @@ uint8_t smc_read_element_status(struct scsi_cmd *cmd)
 
 #ifdef MHVTL_DEBUG
 	uint8_t	voltag = (cdb[1] & 0x10) >> 4;
-	uint8_t	dvcid = cdb[6] & 0x01;	/* Device ID */
+	uint8_t dvcid;	/* Device ID */
+	if (smc_p->pm->no_dvcid_flag)
+		dvcid = 1;
+	else
+		dvcid = cmd->scb[6] & 0x01;	/* Device ID */
 #endif
 
 	MHVTL_DBG(1, "READ ELEMENT STATUS (%ld) **",
@@ -822,7 +843,7 @@ uint8_t smc_read_element_status(struct scsi_cmd *cmd)
 	memset(p, 0, alloc_len);
 
 	if (cdb[11] != 0x0) {	/* Reserved byte.. */
-		MHVTL_DBG(3, "cdb[11] : Illegal value");
+		MHVTL_DBG(2, "cdb[11] : Illegal value of %02x", cdb[11]);
 		sd.byte0 = SKSV | CD;
 		sd.field_pointer = 11;
 		sam_illegal_request(E_INVALID_FIELD_IN_CDB, &sd, sam_stat);
@@ -1087,6 +1108,8 @@ static int move_slot2drive(struct smc_priv *smc_p,
 		return retval;
 	move_cart(src, dest->slot);
 	setDriveFull(dest);
+	/* Set the 'Access bit' to zero - i.e. the picker arm can't access it */
+	setAccessStatus(dest->slot, 0);
 
 	return retval;
 }
@@ -1217,7 +1240,8 @@ static int move_drive2slot(struct smc_priv *smc_p,
 	}
 
 	/* Send 'unload' message to drive b4 the move.. */
-	send_msg("unload", src->drv_id);
+	if (!slotAccess(src->slot))
+		send_msg("unload", src->drv_id);
 
 	if (!smc_p->state_msg)
 		smc_p->state_msg = zalloc(64);
@@ -1312,6 +1336,9 @@ static int move_drive2drive(struct smc_priv *smc_p,
 					slot_number(smc_p->pm, dest->slot));
 	}
 
+	/* Set the 'Access bit' to zero - i.e. the picker arm can't access it */
+	setAccessStatus(dest->slot, 0);
+
 return retval;
 }
 
@@ -1370,21 +1397,21 @@ uint8_t smc_move_medium(struct scsi_cmd *cmd)
 				slot_type(smc_p, transport_addr));
 		sd.byte0 = SKSV | CD;
 		sd.field_pointer = 2;
-		sam_illegal_request(E_INVALID_FIELD_IN_CDB, &sd, sam_stat);
+		sam_illegal_request(E_INVALID_ELEMENT_ADDR, &sd, sam_stat);
 		retval = SAM_STAT_CHECK_CONDITION;
 	}
 	if (!valid_slot(smc_p, src_addr)) {
 		MHVTL_ERR("Invalid source slot: %d", src_addr);
 		sd.byte0 = SKSV | CD;
 		sd.field_pointer = 4;
-		sam_illegal_request(E_INVALID_FIELD_IN_CDB, &sd, sam_stat);
+		sam_illegal_request(E_INVALID_ELEMENT_ADDR, &sd, sam_stat);
 		retval = SAM_STAT_CHECK_CONDITION;
 	}
 	if (!valid_slot(smc_p, dest_addr)) {
 		MHVTL_ERR("Invalid dest slot: %d", dest_addr);
 		sd.byte0 = SKSV | CD;
 		sd.field_pointer = 6;
-		sam_illegal_request(E_INVALID_FIELD_IN_CDB, &sd, sam_stat);
+		sam_illegal_request(E_INVALID_ELEMENT_ADDR, &sd, sam_stat);
 		retval = SAM_STAT_CHECK_CONDITION;
 	}
 

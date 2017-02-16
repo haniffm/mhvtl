@@ -180,6 +180,7 @@ struct priv_lu_ssc {
 	volatile sig_atomic_t *cleaning_media_state;
 
 	char *state_msg;	/* Custom State message */
+	struct q_entry r_entry;	/* IPC message queue */
 
 	struct ssc_personality_template *pm;	/* Personality Module */
 };
@@ -212,7 +213,8 @@ uint8_t ssc_report_density_support(struct scsi_cmd *cmd);
 uint8_t ssc_reserve(struct scsi_cmd *cmd);
 uint8_t ssc_rewind(struct scsi_cmd *cmd);
 uint8_t ssc_locate(struct scsi_cmd *cmd);
-uint8_t ssc_space(struct scsi_cmd *cmd);
+uint8_t ssc_space_6(struct scsi_cmd *cmd);
+uint8_t ssc_space_16(struct scsi_cmd *cmd);
 uint8_t ssc_spin(struct scsi_cmd *cmd);
 uint8_t ssc_spout(struct scsi_cmd *cmd);
 uint8_t ssc_load_unload(struct scsi_cmd *cmd);
@@ -241,12 +243,14 @@ void init_ult3580_td3(struct lu_phy_attr *lu);
 void init_ult3580_td4(struct lu_phy_attr *lu);
 void init_ult3580_td5(struct lu_phy_attr *lu);
 void init_ult3580_td6(struct lu_phy_attr *lu);
+void init_ult3580_td7(struct lu_phy_attr *lu);
 void init_hp_ult_1(struct lu_phy_attr *lu);
 void init_hp_ult_2(struct lu_phy_attr *lu);
 void init_hp_ult_3(struct lu_phy_attr *lu);
 void init_hp_ult_4(struct lu_phy_attr *lu);
 void init_hp_ult_5(struct lu_phy_attr *lu);
 void init_hp_ult_6(struct lu_phy_attr *lu);
+void init_hp_ult_7(struct lu_phy_attr *lu);
 void init_3592_j1a(struct lu_phy_attr *lu);
 void init_3592_E05(struct lu_phy_attr *lu);
 void init_3592_E06(struct lu_phy_attr *lu);
@@ -267,6 +271,6 @@ int resp_write_attribute(struct scsi_cmd *cmd);
 int resp_read_attribute(struct scsi_cmd *cmd);
 int resp_report_density(struct priv_lu_ssc *lu_ssc, uint8_t media,
 						struct vtl_ds *dbuf_p);
-void resp_space(int32_t count, int code, uint8_t *sam_stat);
-void unloadTape(uint8_t *sam_stat);
+void resp_space(int64_t count, int code, uint8_t *sam_stat);
+void unloadTape(struct q_msg *msg, uint8_t *sam_stat);
 void delay_opcode(int what, int value);

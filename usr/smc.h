@@ -17,6 +17,7 @@ struct smc_personality_template {
 	uint32_t library_has_barcode_reader:1;
 	uint32_t library_has_playground:1;
 	uint32_t dvcid_serial_only:1;
+	uint32_t no_dvcid_flag:1;
 
 	uint32_t start_drive;
 	uint32_t start_picker;
@@ -45,6 +46,7 @@ void setSlotEmpty(struct s_info *s);
 void unload_drive_on_shutdown(struct s_info *src, struct s_info *dest);
 
 void init_slot_info(struct lu_phy_attr *lu);
+void init_stkl20(struct lu_phy_attr *lu);
 void init_stklxx(struct lu_phy_attr *lu);
 void init_stkslxx(struct lu_phy_attr *lu);
 void init_default_smc(struct lu_phy_attr *lu);
@@ -56,3 +58,4 @@ void init_hp_eml_smc(struct  lu_phy_attr *lu);
 void init_hp_msl_smc(struct  lu_phy_attr *lu);
 void init_overland_smc(struct  lu_phy_attr *lu);
 void smc_personality_module_register(struct smc_personality_template *pm);
+void setAccessStatus(struct s_info *s, int flg);
