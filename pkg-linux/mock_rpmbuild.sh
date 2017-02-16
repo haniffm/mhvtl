@@ -145,6 +145,14 @@ build_centos_6x() {
     common_build
 }
 
+# Centos 7.x (latest)
+build_centos_7x() {
+    MOCK_CONFIG=${MOCK_CONFIG:-"centos-7.x-x86_64"}
+    KVERSION=${KVERSION:-"3.10.0-514.2.2.el7"}
+    DOCKER_IMAGE="vsm-build-c7"
+    common_build
+}
+
 # allows users to set DISTRO_VERS environment config
 DISTRO_VERS=${DISTRO_VERS:-"$1"}
 
@@ -157,6 +165,9 @@ case "$DISTRO_VERS" in
     ;;
  "6.x")
     build_centos_6x
+    ;;
+ "7.x")
+    build_centos_7x
     ;;
  *)
     DISTRO_VERS="default"
