@@ -111,7 +111,7 @@ TARFILE = $(RPM_DIR)/SOURCES/mhvtl-$(FULL_VERSION).tar
 
 tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
 	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
-	@mkdir mhvtl-$(FULL_VERSION)
+	@mkdir -p mhvtl-$(FULL_VERSION)
 	@cp mhvtl-utils.spec mhvtl-$(FULL_VERSION)
 	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-utils.spec
 	@$(RM) -r mhvtl-$(FULL_VERSION)
@@ -122,7 +122,7 @@ rpm: tar
 
 kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
-	@mkdir mhvtl-$(FULL_VERSION)
+	@mkdir -p mhvtl-$(FULL_VERSION)
 	@cp mhvtl-kmod.spec mhvtl-$(FULL_VERSION)
 	$(TAR) rf $(TARFILE) mhvtl-$(FULL_VERSION)/mhvtl-kmod.spec
 	@$(RM) -r mhvtl-$(FULL_VERSION)

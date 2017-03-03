@@ -15,6 +15,15 @@ set -e
 # env flags to change RPM build behavior
 DEV_BUILD=${DEV_BUILD:-"no"}
 
+# build against the debug kernel
+DEBUG_KERN=${DEBUG_KERN:-"no"}
+
+# turn off safety for speed
+UNCLEAN_MOCK=${UNCLEAN_MOCK:-"no"}
+
+# default to a unique dir per user
+MOCK_UNIQUE=${MOCK_UNIQUE:-$USER}
+
 # the user passes in these things:
 # argv $1: RPM_TAR_FILE  - .tar.gz ready for rpmbuild -ts, -ta, etc
 # env PKG_NAME: name of package
@@ -72,45 +81,77 @@ print_vars_and_flags() {
     echo "MOCK_CONFIG: -> '$MOCK_CONFIG'"
     echo "RESULT_DIR: -> '$RESULT_DIR'"
     echo "RPM_DIR: -> '$RPM_DIR'"
+    echo "KVERSION: -> '$KVERSION'"
 
     echo
     echo "Flags:"
     echo "DEV_BUILD: -> $DEV_BUILD ($(string_flag "$DEV_BUILD"))"
+    echo "DEBUG_KERN: -> $DEBUG_KERN ($(string_flag "$DEBUG_KERN"))"
+    echo "UNCLEAN_MOCK: -> $UNCLEAN_MOCK ($(string_flag "$UNCLEAN_MOCK"))"
     echo
 
 }
 
+build_rpmbuild_flags() {
+    local optargs
+
+    # other macros to add ?
+    optargs="--define 'vendor ${VENDOR}'"
+
+    if [ "${KVERSION}" != "" ]; then
+        optargs="$optargs --define 'kversion ${KVERSION}'"
+    fi
+
+    if test_flag "$DEBUG_KERN"; then
+        optargs="$optargs --define 'kerndebug 1'"
+    fi
+
+    echo "$optargs"
+}
+
 mock_init() {
-    mock "$MOCK_OPTS" --init
+    if ! test_flag "$UNCLEAN_MOCK"; then
+        eval mock "$MOCK_OPTS" --init --scrub=yum-cache
+    fi
 }
 
 mock_build () {
     local spec_file
+    local rpm_flags
 
     spec_file="$1"
 
     test -f "$spec_file"
 
-    # no DEV_BUILD handling here yet - spec file(s) don't support it for mhvtl
-    #
-    # other macros to add
-    OPTARGS="--define 'vendor ${VENDOR}'"
+    rpm_flags=$(build_rpmbuild_flags)
+
+    if test_flag "$DEBUG_KERN"; then
+        MOCK_UNIQUE="$MOCK_UNIQUE.debug"
+    fi
+
+    if test_flag "$UNCLEAN_MOCK"; then
+        MOCK_OPTS="$MOCK_OPTS --no-clean --no-cleanup-after"
+    fi
+
+    MOCK_OPTS="$MOCK_OPTS --uniqueext=${MOCK_UNIQUE}"
 
     echo "MOCK_OPTS: $MOCK_OPTS"
-    echo "OPTARGS: $OPTARGS"
+    echo "RPM flags: $rpm_flags"
 
-    eval mock --buildsrpm "${MOCK_OPTS}" "${OPTARGS}" \
+    eval mock --buildsrpm "${MOCK_OPTS}" \
+    "$rpm_flags" \
     --spec "$spec_file" --sources "${RPM_DIR}/SOURCES" \
     --resultdir "${RESULT_DIR}" --no-cleanup-after \
     --disable-plugin=package_state
 
-    eval mock --rebuild "${MOCK_OPTS}" "${OPTARGS}" \
+    eval mock --rebuild "${MOCK_OPTS}" \
+    "$rpm_flags" \
     --resultdir "${RESULT_DIR}" --no-clean \
     "${RESULT_DIR}/$PKG_NAME-*.src.rpm"
 }
 
 common_build () {
-    MOCK_OPTS=" --uniqueext=${USER} -r ${MOCK_CONFIG}"
+    MOCK_OPTS=" -r ${MOCK_CONFIG}"
 
     # pull the spec file out, as that is the bit mock wants to start with
     spec_file=$(tar xvf "$RPM_TAR_FILE" "*/$PKG_NAME*.spec")
@@ -127,21 +168,17 @@ common_build () {
     mock_build "$(pwd)/$spec_file"
 }
 
-# Centos 6.6
-build_centos_66() {
-    MOCK_CONFIG=${MOCK_CONFIG:-"centos-6.6-x86_64"}
-    common_build
-}
-
-# Centos 6.7
-build_centos_67() {
-    MOCK_CONFIG=${MOCK_CONFIG:-"centos-6.7-x86_64"}
-    common_build
-}
-
-# Centos 6.x (latest), currently 6.7
+# Centos 6.x (latest)
 build_centos_6x() {
-    MOCK_CONFIG=${MOCK_CONFIG:-"centos-6.x-x86_64"}
+    MOCK_CONFIG=${MOCK_CONFIG:-"epel-6-x86_64"}
+    KVERSION=${KVERSION:-"2.6.32-642.13.1.el6.x86_64"}
+    common_build
+}
+
+# Centos 7.x (latest)
+build_centos_7x() {
+    MOCK_CONFIG=${MOCK_CONFIG:-"epel-7-x86_64"}
+    KVERSION=${KVERSION:-"3.10.0-514.6.1.el7.x86_64"}
     common_build
 }
 
@@ -149,17 +186,14 @@ build_centos_6x() {
 DISTRO_VERS=${DISTRO_VERS:-"$1"}
 
 case "$DISTRO_VERS" in
- "6.6")
-    build_centos_66
-    ;;
- "6.7")
-    build_centos_67
-    ;;
  "6.x")
     build_centos_6x
     ;;
+ "7.x")
+    build_centos_7x
+    ;;
  *)
     DISTRO_VERS="default"
-    build_centos_67
+    build_centos_6x
     ;;
 esac
