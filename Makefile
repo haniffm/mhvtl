@@ -22,6 +22,7 @@ PREFIX ?= /usr
 USR ?= vtl
 SUSER ?=root
 GROUP ?= vtl
+BINGROUP ?= bin
 MHVTL_HOME_PATH ?= /opt/mhvtl
 MHVTL_CONFIG_PATH ?= /etc/mhvtl
 LIBDIR ?= /usr/lib
