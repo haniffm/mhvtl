@@ -130,4 +130,4 @@ kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	gzip -f -9 $(TARFILE)
 
 kmod-rpm: kmod-tar
-	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl-kmod bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz
+	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz
