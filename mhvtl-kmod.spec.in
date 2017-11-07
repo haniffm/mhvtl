@@ -9,23 +9,22 @@
 %define kverrel %(%{kmodtool} verrel %{?kversion} 2>/dev/null)
 
 Summary: Virtual Tape Library device driver
-Name: %{kmod_name}-kmod
+Name: %{kmod_name}
 %define real_version @@VERSION@@
 Version: 1.5
-Release: 5.%(echo %{kversion} | tr - _)
+Release: 6.%(echo %{kversion} | tr - _)
 License: GPLv2
 Group: System Environment/Kernel
 URL: http://sites.google.com/site/linuxvtl2/
 
-BuildRequires: redhat-rpm-config
-BuildRequires: kernel-abi-whitelists
+BuildRequires: %kernel_module_package_buildreqs
 ExclusiveArch: i686 x86_64
 
 # Sources.
 Source0: mhvtl-%{real_version}.tar.gz
 
 # Magic hidden here.
-%{expand:%(%{kmodtool} rpmtemplate %{kmod_name} %{kversion} "" 2>/dev/null)}
+%kernel_module_package default
 
 # Disable the building of the debug package(s).
 %define debug_package %{nil}
@@ -38,21 +37,29 @@ specific build.
 
 %prep
 %setup -n %{kmod_name}-%{real_version}/kernel/
+set -- *
+mkdir source
+mv "$@" source/
+mkdir obj
 
 %build
-KSRC=%{_usrsrc}/kernels/%{kversion}
-%{__make} -C "${KSRC}" %{?_smp_mflags} modules M=$PWD
+for flavor in %flavors_to_build; do
+    rm -rf obj/$flavor
+    cp -r source obj/$flavor
+    make -C %{kernel_source $flavor} modules M=$PWD/obj/$flavor
+done
 
 %install
 export INSTALL_MOD_PATH=%{buildroot}
 export INSTALL_MOD_DIR=extra/%{kmod_name}
-KSRC=%{_usrsrc}/kernels/%{kversion}
-%{__make} -C "${KSRC}" modules_install M=$PWD
+for flavor in %flavors_to_build; do
+    make -C %{kernel_source $flavor} modules_install M=$PWD/obj/$flavor
+done
 # Set the module(s) to be executable, so that they will be stripped when packaged.
 find %{buildroot} -type f -name \*.ko -exec %{__chmod} u+x \{\} \;
 
 %clean
-%{__rm} -rf %{buildroot}
+rm -rf %{buildroot}
 
 %changelog
 * Mon Feb 1 2016 Nic Henke <nic.henke@versity.com> - 1.5.3-2
