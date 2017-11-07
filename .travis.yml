@@ -1,0 +1,34 @@
+language: bash
+sudo: required
+dist: trusty
+services: docker
+cache:
+  directories:
+    - /home/travis/.mock_cache
+
+notifications:
+  slack:
+      secure: "uF5jtMi2cSMKdcsFieYlnruHTApd5GudTCAIh/AJmuv5zO/4sU8O0VV8uTXee4MtP+pbtuBjWMnF+cG0T9Kmn41bUwj0+TYqCDiTqgTy+56jseNylFNif+DjoO7xPEefBb8D+KyGX0Zp8BxtyowCUl4KckTyCe2xQ0uu/kgySo0="
+  on_success: always # default: always
+  on_failure: always # default: always
+
+env:
+  matrix:
+    - VERSION=el73 DISTRO_VERS=7.3
+
+before_script:
+  - env | sort
+
+script:
+  # Run privileged due to mock needing fancy chroot and other device creation from RPM
+  # installs
+  - docker run --privileged=true -e DISTRO_VERS=$DISTRO_VERS --rm -it -v /home/travis/.mock_cache:/var/cache/mock -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make rpm
+
+  - docker run --privileged=true -e DISTRO_VERS=$DISTRO_VERS --rm -it -v /home/travis/.mock_cache:/var/cache/mock -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make kmod-rpm
+
+before_deploy:
+  - mkdir upload_rpms
+  - find . -name "*.x86_64.rpm" | xargs -n1 cp --target-directory=$(pwd)/upload_rpms
+  - ls -la upload_rpms/
+
+# vim:set et ts=2 sw=2:
