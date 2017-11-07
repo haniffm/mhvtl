@@ -977,6 +977,26 @@ static int check_tape_load(void)
 	return strncmp("Loaded OK", q.msg.text, 9);
 }
 
+static int check_tape_unload(void)
+{
+	int mlen, r_qid;
+	struct q_entry q;
+
+	/* Initialise message queue as necessary */
+	r_qid = init_queue();
+	if (r_qid == -1) {
+		printf("Could not initialise message queue\n");
+		exit(1);
+	}
+
+	mlen = msgrcv(r_qid, &q, MAXOBN, my_id, MSG_NOERROR);
+	if (mlen > 0)
+		MHVTL_DBG(2, "Received \"%s\" from message Q", q.msg.text);
+
+	return strncmp("ejected", q.msg.text, 9);
+}
+
+
 /*
  * Logically move information from 'src' address to 'dest' address
  */
@@ -1250,6 +1270,13 @@ static int move_drive2slot(struct smc_priv *smc_p,
 	/* Send 'unload' message to drive b4 the move.. */
 	if (!slotAccess(src->slot))
 		send_msg("unload", src->drv_id);
+
+	if (check_tape_unload()) {
+		MHVTL_ERR("Unload of %s from drive %d failed",
+					cmd, slot_number(smc_p->pm, src->slot));
+		sam_hardware_error(E_MANUAL_INTERVENTION_REQ, sam_stat);
+		return SAM_STAT_CHECK_CONDITION;
+	}
 
 	if (!smc_p->state_msg)
 		smc_p->state_msg = zalloc(64);

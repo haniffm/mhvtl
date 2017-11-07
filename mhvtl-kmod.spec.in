@@ -12,7 +12,7 @@ Summary: Virtual Tape Library device driver
 Name: %{kmod_name}
 %define real_version @@VERSION@@
 Version: 1.5
-Release: 5.%(echo %{kversion} | tr - _)
+Release: 6.%(echo %{kversion} | tr - _)
 License: GPLv2
 Group: System Environment/Kernel
 URL: http://sites.google.com/site/linuxvtl2/
