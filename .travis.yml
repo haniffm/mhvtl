@@ -12,6 +12,14 @@ notifications:
   on_success: always # default: always
   on_failure: always # default: always
 
+
+deploy:
+  - provider: script
+    script: /bin/bash -x $TRAVIS_BUILD_DIR/.travis_deploy.sh
+    on:
+      tags: true
+      all_branches: true
+
 env:
   matrix:
     - VERSION=el73 DISTRO_VERS=7.3
@@ -30,5 +38,9 @@ before_deploy:
   - mkdir upload_rpms
   - find . -name "*.x86_64.rpm" | xargs -n1 cp --target-directory=$(pwd)/upload_rpms
   - ls -la upload_rpms/
+
+  - wget https://dl.bintray.com/jfrog/jfrog-cli-go/1.7.1/jfrog-cli-linux-amd64/jfrog
+  - chmod +x jfrog
+  - ./jfrog rt config --url $ARTIFACTORY_URL --user $ARTIFACTORY_USER --password $ARTIFACTORY_PASSWORD
 
 # vim:set et ts=2 sw=2:
