@@ -6,7 +6,7 @@ Summary: Virtual tape library. kernel pseudo HBA driver + userspace daemons
 Name: mhvtl-utils
 %define real_version @@VERSION@@
 Version: 1.5
-Release: 4%{?dist}
+Release: 5%{?dist}
 License: GPL
 Group: System/Kernel
 URL: http://sites.google.com/site/linuxvtl2/
