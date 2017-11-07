@@ -50,6 +50,11 @@ export RESULT_DIR RPM_DIR
 # mock ignores $HOME/.rpmmacros, so set here
 VENDOR="Versity Software, Inc."
 
+
+# make sure we run /usr/bin/mock
+PATH=/usr/bin:$PATH
+export PATH
+
 test_flag() {
     flag=$1
 
@@ -133,7 +138,7 @@ mock_build () {
         MOCK_OPTS="$MOCK_OPTS --no-clean --no-cleanup-after"
     fi
 
-    MOCK_OPTS="$MOCK_OPTS --uniqueext=${MOCK_UNIQUE}"
+    MOCK_OPTS="$MOCK_OPTS --uniqueext=${MOCK_UNIQUE} --old-chroot"
 
     echo "MOCK_OPTS: $MOCK_OPTS"
     echo "RPM flags: $rpm_flags"
@@ -175,6 +180,14 @@ build_centos_6x() {
     common_build
 }
 
+# Centos 7.3
+build_centos_73() {
+    MOCK_CONFIG=${MOCK_CONFIG:-"vsm2-el73-x86_64"}
+    KVERSION=${KVERSION:-"3.10.0-514.26.2.el7.x86_64"}
+    common_build
+}
+
+
 # Centos 7.x (latest)
 build_centos_7x() {
     MOCK_CONFIG=${MOCK_CONFIG:-"epel-7-x86_64"}
@@ -188,6 +201,9 @@ DISTRO_VERS=${DISTRO_VERS:-"$1"}
 case "$DISTRO_VERS" in
  "6.x")
     build_centos_6x
+    ;;
+ "7.3")
+    build_centos_73
     ;;
  "7.x")
     build_centos_7x
