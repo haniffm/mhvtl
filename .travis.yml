@@ -16,6 +16,7 @@ notifications:
 deploy:
   - provider: script
     script: /bin/bash -x $TRAVIS_BUILD_DIR/.travis_deploy.sh
+    skip_cleanup: true
     on:
       tags: true
       all_branches: true
