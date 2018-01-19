@@ -119,7 +119,7 @@ tar: $(RPM_DIR) mhvtl-utils.spec .FORCE
 	gzip -f -9 $(TARFILE)
 
 rpm: tar
-	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl-utils bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz
+	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl-utils rpmbuild.sh $(TARFILE).gz
 
 kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	git archive --format=tar --prefix mhvtl-$(FULL_VERSION)/ HEAD^{tree} > $(TARFILE)
@@ -130,4 +130,4 @@ kmod-tar: distclean $(RPM_DIR) mhvtl-kmod.spec
 	gzip -f -9 $(TARFILE)
 
 kmod-rpm: kmod-tar
-	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl bash pkg-linux/mock_rpmbuild.sh $(TARFILE).gz
+	env FULL_VERSION=$(FULL_VERSION) PKG_NAME=mhvtl rpmbuild.sh $(TARFILE).gz
