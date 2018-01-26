@@ -2,9 +2,6 @@ language: bash
 sudo: required
 dist: trusty
 services: docker
-cache:
-  directories:
-    - /home/travis/.mock_cache
 
 notifications:
   slack:
@@ -23,17 +20,16 @@ deploy:
 
 env:
   matrix:
-    - VERSION=el73 DISTRO_VERS=7.3
+    - VERSION=el73 DISTRO_VERS=7.3 DISTRO=.el7
+    - VERSION=el6x DISTRO_VERS=6.x DISTRO=.el6
 
 before_script:
   - env | sort
 
 script:
-  # Run privileged due to mock needing fancy chroot and other device creation from RPM
-  # installs
-  - docker run --privileged=true -e DISTRO_VERS=$DISTRO_VERS --rm -it -v /home/travis/.mock_cache:/var/cache/mock -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make rpm
+  - travis_wait docker run --privileged=true -e USER=root -e DISTRO=$DISTRO -e DISTRO_VERS=$DISTRO_VERS --rm -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make rpm
 
-  - docker run --privileged=true -e DISTRO_VERS=$DISTRO_VERS --rm -it -v /home/travis/.mock_cache:/var/cache/mock -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make kmod-rpm
+  - travis_wait docker run --privileged=true -e USER=root -e DISTRO=$DISTRO -e DISTRO_VERS=$DISTRO_VERS --rm -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make kmod-rpm
 
 before_deploy:
   - mkdir upload_rpms
