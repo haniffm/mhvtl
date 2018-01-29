@@ -25,15 +25,16 @@ env:
 
 before_script:
   - env | sort
+  - mkdir upload_rpms
 
 script:
   - travis_wait docker run --privileged=true -e USER=root -e DISTRO=$DISTRO -e DISTRO_VERS=$DISTRO_VERS --rm -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make rpm
+  - find rpmbuild -name "*.x86_64.rpm" | xargs -n1 cp --target-directory=$(pwd)/upload_rpms
 
   - travis_wait docker run --privileged=true -e USER=root -e DISTRO=$DISTRO -e DISTRO_VERS=$DISTRO_VERS --rm -v $(pwd):/src -w /src versity/rpm-build:${VERSION} make kmod-rpm
+  - find rpmbuild -name "*.x86_64.rpm" | xargs -n1 cp --target-directory=$(pwd)/upload_rpms
 
 before_deploy:
-  - mkdir upload_rpms
-  - find . -name "*.x86_64.rpm" | xargs -n1 cp --target-directory=$(pwd)/upload_rpms
   - ls -la upload_rpms/
 
   - wget https://dl.bintray.com/jfrog/jfrog-cli-go/1.7.1/jfrog-cli-linux-amd64/jfrog
