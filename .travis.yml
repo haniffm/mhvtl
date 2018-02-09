@@ -21,6 +21,7 @@ deploy:
 env:
   matrix:
     - VERSION=el73 DISTRO_VERS=7.3 DISTRO=.el7
+    - VERSION=el7x DISTRO_VERS=7.x DISTRO=.el7
     - VERSION=el6x DISTRO_VERS=6.x DISTRO=.el6
 
 before_script:
