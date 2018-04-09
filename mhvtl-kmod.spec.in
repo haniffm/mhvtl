@@ -4,15 +4,11 @@
 
 %global kmodtool /usr/lib/rpm/redhat/kmodtool
 
-# If kversion isn't defined on the rpmbuild line, define it here.
-%{!?kversion: %define kversion 2.6.32-573.12.1.el6.%{_target_cpu}}
-%define kverrel %(%{kmodtool} verrel %{?kversion} 2>/dev/null)
-
 Summary: Virtual Tape Library device driver
 Name: %{kmod_name}
 %define real_version @@VERSION@@
 Version: 1.5
-Release: 6.%(echo %{kversion} | tr - _)
+Release: 7%{?dist}
 License: GPLv2
 Group: System Environment/Kernel
 URL: http://sites.google.com/site/linuxvtl2/
