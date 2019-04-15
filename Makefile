@@ -78,8 +78,8 @@ install:
 	$(MAKE) -C scripts install $(PREFIX) $(DESTDIR)
 	$(MAKE) etc
 	$(MAKE) -i -C etc install $(DESTDIR) USR=$(USR)
-	$(MAKE) -C man man
-	$(MAKE) -C man install $(PREFIX) $(DESTDIR) USR=$(USR)
+	#$(MAKE) -C man man
+	#$(MAKE) -C man install $(PREFIX) $(DESTDIR) USR=$(USR)
 	test -d $(DESTDIR)/opt/mhvtl || mkdir -p $(DESTDIR)/opt/mhvtl
 
 tar:
